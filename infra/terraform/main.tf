@@ -86,6 +86,14 @@ resource "local_file" "ansible_inventory" {
 resource "null_resource" "ansible_provisioner" {
   depends_on = [aws_instance.app_server]
 
+  # Wait for SSH to be ready before running ansible
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("~/.ssh/${var.key_pair_name}.pem")
+    host        = aws_instance.app_server.public_ip
+  }
+
   provisioner "local-exec" {
     command = <<-EOT
       ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ${local_file.ansible_inventory.filename} \
