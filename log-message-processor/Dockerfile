@@ -2,15 +2,14 @@ FROM python:3.8-slim-bullseye
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y build-essential python3-dev
+# Install build dependencies and a specific version of Cython to build thriftpy
+RUN apt-get update && apt-get install -y build-essential
+RUN pip install --upgrade pip
+RUN pip install "cython<0.29"
 
-# Copy requirements.txt and install dependencies
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the source code
 COPY . .
 
-# Command to run the application
 CMD ["python", "main.py"]
