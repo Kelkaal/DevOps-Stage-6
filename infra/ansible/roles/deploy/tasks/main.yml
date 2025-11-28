@@ -24,6 +24,9 @@
     dest: "{{ app_repo_path }}/docker-compose.yml"
     mode: '0644'
 
+- name: Clean up unused Docker data to free space
+  command: docker system prune -a -f
+
 - name: Start Docker Compose services
   community.docker.docker_compose:
     project_src: "{{ app_repo_path }}"
