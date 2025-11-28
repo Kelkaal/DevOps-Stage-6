@@ -31,4 +31,5 @@
   community.docker.docker_compose:
     project_src: "{{ app_repo_path }}"
     build: yes
+    nocache: yes # Force rebuild from scratch
     state: present
