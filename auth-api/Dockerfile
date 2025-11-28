@@ -23,6 +23,8 @@ WORKDIR /root/
 # Copy the built binary from the builder stage
 COPY --from=builder /app/auth-api .
 
+RUN chmod +x ./auth-api
+
 # Expose port (will be mapped in docker-compose.yml)
 EXPOSE 8080
 
