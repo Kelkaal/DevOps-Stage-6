@@ -1,0 +1,12 @@
+---
+- name: Provision and Deploy Application
+  hosts: app_servers
+  become: yes
+
+  vars:
+    app_repo_url: "https://github.com/Kelkaal/DevOps-Stage-6.git"
+    app_repo_path: "/opt/devops-stage-6"
+
+  roles:
+    - role: dependencies
+    - role: deploy

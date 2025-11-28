@@ -1,0 +1,31 @@
+---
+- name: Check if repository destination exists and if it is a git repo
+  stat:
+    path: "{{ app_repo_path }}/.git"
+  register: git_stat
+
+- name: Remove broken directory if it exists but is not a valid git repository
+  file:
+    path: "{{ app_repo_path }}"
+    state: absent
+  when: not git_stat.stat.exists and git_stat.stat.path is defined
+
+- name: Clone or pull application repository
+  ansible.builtin.git:
+    repo: "{{ app_repo_url }}"
+    dest: "{{ app_repo_path }}"
+    version: main
+    update: yes
+    force: yes
+
+- name: Copy docker-compose.yml to application directory
+  copy:
+    src: "{{ playbook_dir }}/../../docker-compose.yml"
+    dest: "{{ app_repo_path }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Start Docker Compose services
+  community.docker.docker_compose:
+    project_src: "{{ app_repo_path }}"
+    build: yes
+    state: present
