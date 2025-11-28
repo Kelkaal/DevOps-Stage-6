@@ -14,7 +14,7 @@ COPY src ./src
 RUN mvn package -Dmaven.test.skip=true
 
 # Final Stage
-FROM openjdk:18-jre-alpine
+FROM eclipse-temurin:18-jre-alpine
 
 WORKDIR /app
 
