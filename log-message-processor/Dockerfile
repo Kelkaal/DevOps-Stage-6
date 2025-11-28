@@ -1,10 +1,12 @@
-FROM python:3.8-alpine
+FROM python:3.8-slim-buster
 
 WORKDIR /app
 
+# Install build dependencies needed for thriftpy
+RUN apt-get update && apt-get install -y build-essential python3-dev
+
 # Copy requirements.txt and install dependencies
 COPY requirements.txt ./
-RUN apk add --no-cache build-base python3-dev
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the source code
