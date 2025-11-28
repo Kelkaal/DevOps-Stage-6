@@ -66,6 +66,10 @@ resource "aws_instance" "app_server" {
   subnet_id     = var.subnet_id
   vpc_security_group_ids = [aws_security_group.app_sg.id]
 
+  root_block_device {
+    volume_size = 20 # Increase root disk size to 20GB
+  }
+
   tags = {
     Name    = "devops-app-server"
     Project = "DevOps-Stage-6"
