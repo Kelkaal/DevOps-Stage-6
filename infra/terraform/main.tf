@@ -90,16 +90,20 @@ resource "local_file" "ansible_inventory" {
 resource "null_resource" "ansible_provisioner" {
   depends_on = [aws_instance.app_server]
 
-  # Wait for SSH to be ready before running ansible
-  connection {
-    type        = "ssh"
-    user        = "ubuntu"
-    private_key = file("~/.ssh/${var.key_pair_name}.pem")
-    host        = aws_instance.app_server.public_ip
-  }
-
   provisioner "local-exec" {
     command = <<-EOT
+      # Wait 30 seconds for the instance to fully boot and start sshd
+      echo "Waiting for instance to boot..."
+      sleep 30
+
+      # Wait for SSH to be ready by polling the port
+      until nc -zw5 ${aws_instance.app_server.public_ip} 22; do
+          echo "Waiting for SSH port to open..."
+          sleep 5
+      done
+      echo "SSH port is open! Starting Ansible."
+
+      # Now run Ansible
       ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ${local_file.ansible_inventory.filename} \
       --private-key ~/.ssh/${var.key_pair_name}.pem \
       ../ansible/playbook.yml

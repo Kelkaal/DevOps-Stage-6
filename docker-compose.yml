@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   traefik:
-    image: "traefik:v2.11" # Updated to a newer version
+    image: "traefik:v2.11"
     container_name: "traefik"
     command:
       - "--api.insecure=true"
@@ -11,8 +11,8 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=kelechikalu95@gmail.com" # User's email
-      - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"      # Corrected storage path
+      - "--certificatesresolvers.myresolver.acme.email=kelechikalu95@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
     ports:
@@ -21,7 +21,9 @@ services:
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "traefik_data:/data" # Using a named volume for persistence
+      - "traefik_data:/data"
+    networks:
+      - web
 
   frontend:
     build: ./frontend
@@ -30,41 +32,56 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`remmyboothe.online`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    networks:
+      - web
 
   auth-api:
     build: ./auth-api
     environment:
       - USERS_API_ADDRESS=http://users-api:8083
-      - JWT_SECRET=your-super-secret-key # CHANGE THIS
+      - JWT_SECRET=your-super-secret-key
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.auth-api.entrypoints=websecure"
       - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
+      - "traefik.http.services.auth-api.loadbalancer.server.port=8080"
+    networks:
+      - web
+      - internal
 
   todos-api:
     build: ./todos-api
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=your-super-secret-key # CHANGE THIS
+      - JWT_SECRET=your-super-secret-key
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.todos-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/todos`)"
       - "traefik.http.routers.todos-api.entrypoints=websecure"
       - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
+      - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
     depends_on:
       - redis
+    networks:
+      - web
+      - internal
 
   users-api:
     build: ./users-api
     environment:
-      - JWT_SECRET=your-super-secret-key # CHANGE THIS
+      - JWT_SECRET=your-super-secret-key
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.users-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/users`)"
       - "traefik.http.routers.users-api.entrypoints=websecure"
       - "traefik.http.routers.users-api.tls.certresolver=myresolver"
+      - "traefik.http.services.users-api.loadbalancer.server.port=8083"
+    networks:
+      - web
+      - internal
 
   log-message-processor:
     build: ./log-message-processor
@@ -74,13 +91,22 @@ services:
       - REDIS_CHANNEL=log_channel
     depends_on:
       - redis
+    networks:
+      - internal
 
   redis:
     image: "redis:6-alpine"
     volumes:
       - "redis-data:/data"
+    networks:
+      - internal
 
 volumes:
   redis-data:
-  traefik_data: # Named volume for Traefik data
+  traefik_data:
 
+networks:
+  web:
+    driver: bridge
+  internal:
+    driver: bridge
