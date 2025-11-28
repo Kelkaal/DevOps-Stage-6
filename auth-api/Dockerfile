@@ -23,6 +23,7 @@ WORKDIR /root/
 # Copy the built binary from the builder stage
 COPY --from=builder /app/auth-api .
 RUN chmod +x ./auth-api
+RUN chmod +x ./auth-api
 
 RUN chmod +x ./auth-api
 
