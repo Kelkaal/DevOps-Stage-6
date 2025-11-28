@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   traefik:
-    image: "traefik:v2.10"
+    image: "traefik:v2.11" # Updated to a newer version
     container_name: "traefik"
     command:
       - "--api.insecure=true"
@@ -11,8 +11,8 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com" # CHANGE THIS
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.myresolver.acme.email=kelechikalu95@gmail.com" # User's email
+      - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"      # Corrected storage path
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
     ports:
@@ -21,7 +21,7 @@ services:
       - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+      - "traefik_data:/data" # Using a named volume for persistence
 
   frontend:
     build: ./frontend
@@ -82,3 +82,5 @@ services:
 
 volumes:
   redis-data:
+  traefik_data: # Named volume for Traefik data
+
