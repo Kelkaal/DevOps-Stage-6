@@ -14,3 +14,4 @@ crash.*.log
 
 # Terraform lock file
 .terraform.lock.hcl
+infra/terraform/ansible_inventory.ini

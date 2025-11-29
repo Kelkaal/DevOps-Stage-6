@@ -21,3 +21,17 @@ variable "key_pair_name" {
   type        = string
   default     = "Theos_boothe"
 }
+
+variable "vpc_id" {
+  description = "The ID of the VPC to deploy the EC2 instance into."
+  type        = string
+  # Default value should be a valid VPC ID in your AWS account
+  default     = "vpc-0a1b2c3d4e5f6a7b8" # REPLACE with your VPC ID
+}
+
+variable "subnet_id" {
+  description = "The ID of the subnet to deploy the EC2 instance into."
+  type        = string
+  # Default value should be a valid subnet ID in your AWS account, within the specified VPC
+  default     = "subnet-0123456789abcdef0" # REPLACE with your Subnet ID
+}

@@ -1,40 +1,40 @@
+provider "aws" {
+  region = var.aws_region
+}
+
 terraform {
   cloud {
     organization = "BootheOdeg"
-
     workspaces {
-      name = "bfwnfwqojfwqonwq"
+      name = "bfwnfwqojfwqonwq" # Keep my workspace name
     }
-  }
-
-  provider "aws" {
-    region = var.aws_region
   }
 }
 
 resource "aws_security_group" "app_sg" {
-  name_prefix = "app-sg-"
-  description = "Security group for the application server"
+  name_prefix = "devops-app-sg-" # From remote
+  description = "Security group for the DevOps Stage 6 application" # From remote
+  vpc_id      = var.vpc_id # From remote
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow SSH from anywhere (restrict in production)
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow HTTP from anywhere
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Allow HTTPS from anywhere
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -43,41 +43,60 @@ resource "aws_security_group" "app_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = { # From remote
+    Name    = "devops-app-sg"
+    Project = "DevOps-Stage-6"
+  }
 }
 
 resource "aws_instance" "app_server" {
   ami           = var.ami_id
   instance_type = var.instance_type
   key_name      = var.key_pair_name
-  security_groups = [aws_security_group.app_sg.name]
-  associate_public_ip_address = true
+  subnet_id     = var.subnet_id # From remote
+  vpc_security_group_ids = [aws_security_group.app_sg.id] # From remote, using ID not name
 
-  tags = {
-    Name = "gemini-app-server"
+  root_block_device { # From remote
+    volume_size = 20 # Increased disk size
   }
 
-  # User data to install Docker and Docker Compose
-  user_data = <<-EOF
-              #!/bin/bash
-              sudo apt-get update
-              sudo apt-get install -y docker.io docker-compose git
-              sudo usermod -aG docker ubuntu
-              newgrp docker
-              # Clone the repository and start the application
-              # The user will need to replace this with their actual repo URL
-              # git clone https://github.com/your-username/DevOps-Stage-6.git /home/ubuntu/DevOps-Stage-6
-              # cd /home/ubuntu/DevOps-Stage-6
-              # docker compose up -d
-              EOF
-
-  provisioner "local-exec" {
-    command = "echo '[app_servers]' > ../ansible/inventory.ini && echo '${self.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/${var.key_pair_name}.pem' >> ../ansible/inventory.ini"
-    interpreter = ["bash", "-c"]
+  tags = { # From remote
+    Name    = "devops-app-server"
+    Project = "DevOps-Stage-6"
   }
+}
+
+resource "local_file" "ansible_inventory" { # From remote
+  content = templatefile("${path.module}/ansible_inventory.tpl", {
+    app_server_ip = aws_instance.app_server.public_ip
+    ssh_user      = "ubuntu"
+    ssh_key_path  = var.key_pair_name
+  })
+  filename = "${path.module}/ansible_inventory.ini"
+}
+
+resource "null_resource" "ansible_provisioner" { # From remote
+  depends_on = [aws_instance.app_server]
 
   provisioner "local-exec" {
-    command     = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ../ansible/inventory.ini ../ansible/playbook.yml"
-    interpreter = ["bash", "-c"]
-    working_dir = ".." # This is important to ensure relative paths in Ansible work correctly
+    command = <<EOT
+      # Wait 30 seconds for the instance to fully boot and start sshd
+      echo "Waiting for instance to boot..."
+      sleep 30
+
+      # Wait for SSH to be ready by polling the port
+      until nc -zw5 ${aws_instance.app_server.public_ip} 22; do
+          echo "Waiting for SSH port to open..."
+          sleep 5
+      done
+      echo "SSH port is open! Starting Ansible."
+
+      # Now run Ansible
+      ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ${local_file.ansible_inventory.filename} \
+      --private-key ~/.ssh/${var.key_pair_name}.pem \
+      ../ansible/playbook.yml
+    EOT
+    working_dir = path.module
   }
 }
