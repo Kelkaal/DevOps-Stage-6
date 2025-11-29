@@ -1,4 +1,4 @@
-name: Infrastructure CI/CD
+name: Infrastructure CI
 
 on:
   push:
@@ -7,32 +7,80 @@ on:
     paths:
       - 'infra/**'
 
+env:
+  TF_WORKING_DIR: infra/terraform
+
 jobs:
   terraform:
-    name: 'Terraform'
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
+      pull-requests: write # For commenting on PRs
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::699475958154:role/GitHubActions-Terraform-Role # REPLACE with your AWS IAM Role ARN
+        aws-region: us-east-1 # REPLACE with your desired AWS region
 
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color
-        working-directory: ./infra/terraform
-        continue-on-error: true
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.6
 
-      - name: Terraform Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
+    - name: Terraform Init
+      id: init
+      run: terraform init -backend-config="bucket=gemini-tfstate-bucket" -backend-config="region=us-east-1"
+      working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
-        working-directory: ./infra/terraform
+    - name: Terraform Plan
+      id: plan
+      run: terraform plan -no-color -out=tfplan
+      working-directory: ${{ env.TF_WORKING_DIR }}
+      continue-on-error: true # Allow plan to fail if there are no changes, to check for drift
+
+    - name: Check for Terraform Plan Changes
+      id: check_plan
+      run: |
+        PLAN_OUTPUT=$(terraform show -no-color tfplan)
+        echo "$PLAN_OUTPUT"
+        if echo "$PLAN_OUTPUT" | grep -q "No changes. Your infrastructure matches the configuration."; then
+          echo "::set-output name=has_changes::false"
+          echo "No changes detected. Skipping manual approval."
+        else
+          echo "::set-output name=has_changes::true"
+          echo "Changes detected. Manual approval required."
+        fi
+      working-directory: ${{ env.TF_WORKING_DIR }}
+      shell: bash
+
+    - name: Upload Terraform Plan Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tfplan
+        path: ${{ env.TF_WORKING_DIR }}/tfplan
+        if-no-files-found: ignore
+
+    - name: Notify on Drift and Request Approval
+      if: steps.check_plan.outputs.has_changes == 'true'
+      uses: trstringer/manual-approval@v1
+      with:
+        secret: ${{ secrets.GITHUB_TOKEN }}
+        approvers: 'Kelkaal' # REPLACE with your GitHub username or team
+        minimum-approvals: 1
+        description: 'Terraform plan detected changes. Please review the attached tfplan artifact and approve to apply.'
+        issue-title: "Terraform Plan requires manual approval"
+        issue-body: "A Terraform plan detected changes. Please review the `tfplan` artifact from the run and approve this job to apply the changes. [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        exclude-workflow-initiator-as-approver: false
+        # For email notification, consider using a separate action or relying on GitHub notifications.
+        # This action creates an issue for approval, which can notify users.
+
+    - name: Terraform Apply
+      if: steps.check_plan.outputs.has_changes == 'true' || steps.check_plan.outputs.has_changes == 'false'
+      run: terraform apply -auto-approve tfplan
+      working-directory: ${{ env.TF_WORKING_DIR }}

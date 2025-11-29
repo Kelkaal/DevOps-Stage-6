@@ -1,35 +1,28 @@
 ---
-- name: Check if repository destination exists and if it is a git repo
-  stat:
-    path: "{{ app_repo_path }}/.git"
-  register: git_stat
-
-- name: Remove broken directory if it exists but is not a valid git repository
-  file:
-    path: "{{ app_repo_path }}"
-    state: absent
-  when: not git_stat.stat.exists and git_stat.stat.path is defined
-
 - name: Clone or pull application repository
   ansible.builtin.git:
-    repo: "{{ app_repo_url }}"
-    dest: "{{ app_repo_path }}"
-    version: main
-    update: yes
-    force: yes
+    repo: 'https://github.com/Kelkaal/DevOps-Stage-6.git' # REPLACE with your actual repository URL
+    dest: /home/ubuntu/DevOps-Stage-6
+    version: master # or main, or a specific branch/tag
+    accept_hostkey: yes
+    force: yes # Use force to ensure checkout of the specified version
 
-- name: Copy docker-compose.yml to application directory
-  copy:
-    src: "{{ playbook_dir }}/../../docker-compose.yml"
-    dest: "{{ app_repo_path }}/docker-compose.yml"
+- name: Copy docker-compose.yml to the application directory
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../docker-compose.yml" # Path from playbook to project root docker-compose.yml
+    dest: /home/ubuntu/DevOps-Stage-6/docker-compose.yml
     mode: '0644'
 
-- name: Clean up unused Docker data to free space
-  command: docker system prune -a -f
+- name: Copy acme.json for Traefik certificates (if it exists)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../acme.json" # Path from playbook to project root acme.json
+    dest: /home/ubuntu/DevOps-Stage-6/acme.json
+    mode: '0600'
+  ignore_errors: yes # This file might not exist on first deploy
 
-- name: Start Docker Compose services
+- name: Build and start Docker containers
   community.docker.docker_compose:
-    project_src: "{{ app_repo_path }}"
+    project_src: /home/ubuntu/DevOps-Stage-6
     build: yes
-    nocache: yes # Force rebuild from scratch
     state: present
+  become: true # Run docker compose with root privileges

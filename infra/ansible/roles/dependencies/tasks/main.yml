@@ -1,50 +1,62 @@
 ---
 - name: Update apt cache
-  apt:
+  ansible.builtin.apt:
     update_cache: yes
-    cache_valid_time: 3600
 
 - name: Install required system packages
-  apt:
+  ansible.builtin.apt:
     name:
       - apt-transport-https
       - ca-certificates
       - curl
-      - gnupg
-      - lsb-release
+      - gnupg-agent
+      - software-properties-common
       - git
-      - python3-pip
     state: present
 
-- name: Add Docker's official GPG key
-  apt_key:
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
     state: present
 
-- name: Set up the stable Docker repository
-  apt_repository:
-    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+- name: Add Docker APT repository
+  ansible.builtin.apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
     state: present
 
-- name: Install Docker Engine and Docker Compose
-  apt:
+- name: Install Docker Engine
+  ansible.builtin.apt:
     name:
       - docker-ce
       - docker-ce-cli
       - containerd.io
-      - docker-compose-plugin
     state: present
-    update_cache: yes
 
-- name: Add remote user to docker group
-  user:
-    name: "{{ ansible_user }}"
+- name: Install Docker Compose plugin
+  ansible.builtin.get_url:
+    url: https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: 'u+x,g+x'
+  args:
+    creates: /usr/local/lib/docker/cli-plugins/docker-compose
+
+- name: Ensure /usr/local/bin exists
+  ansible.builtin.file:
+    path: /usr/local/bin
+    state: directory
+    mode: '0755'
+
+- name: Create symlink for docker-compose
+  ansible.builtin.file:
+    src: /usr/local/lib/docker/cli-plugins/docker-compose
+    dest: /usr/local/bin/docker-compose
+    state: link
+
+- name: Add ubuntu user to docker group
+  ansible.builtin.user:
+    name: ubuntu
     groups: docker
     append: yes
-
-- name: Install compatible version of Docker and Docker-Compose Python libraries
-  pip:
-    name:
-      - "docker<5"
-      - "docker-compose<2"
-    state: present
+  # Important: A reboot or re-login is required for the user to be part of the new group.
+  # For Ansible, this often means ensuring the next tasks run with the updated group
+  # by using 'become_user: ubuntu' after a pause or force a re-evaluation of group membership.

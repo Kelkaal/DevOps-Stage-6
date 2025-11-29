@@ -1,45 +1,75 @@
-name: Application CI/CD
+name: Application CI
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'auth-api/**'
       - 'frontend/**'
-      - 'log-message-processor/**'
+      - 'auth-api/**'
       - 'todos-api/**'
       - 'users-api/**'
+      - 'log-message-processor/**'
       - 'docker-compose.yml'
 
 jobs:
-  deploy:
-    name: 'Deploy Application'
+  deploy-application:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::699475958154:role/GitHubActions-Terraform-Role # REPLACE with your AWS IAM Role ARN
+        aws-region: us-east-1 # REPLACE with your desired AWS region
 
-      - name: Get Server IP
-        id: get_ip
-        run: |
-          cd infra/terraform
-          echo "::set-output name=server_ip::$(terraform output -raw public_ip)"
-        working-directory: ./
+    - name: Get EC2 Instance Public IP
+      id: get_ip
+      run: |
+        INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=gemini-app-server" "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].InstanceId" \
+          --output text)
+        
+        if [ -z "$INSTANCE_ID" ]; then
+          echo "No running instance found with tag Name=gemini-app-server. Exiting."
+          exit 1
+        fi
 
-      - name: Deploy Application
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ steps.get_ip.outputs.server_ip }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/devops-stage-6
-            git pull
-            docker-compose up -d --build
+        PUBLIC_IP=$(aws ec2 describe-instances \
+          --instance-ids $INSTANCE_ID \
+          --query "Reservations[0].Instances[0].PublicIpAddress" \
+          --output text)
+        
+        if [ -z "$PUBLIC_IP" ]; then
+          echo "Could not retrieve public IP for instance $INSTANCE_ID. Exiting."
+          exit 1
+        fi
+
+        echo "::set-output name=public_ip::$PUBLIC_IP"
+      shell: bash
+
+    - name: Set up SSH key for Ansible
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Create temporary Ansible inventory
+      run: |
+        echo "[app_servers]" > inventory.ini
+        echo "${{ steps.get_ip.outputs.public_ip }} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/app-server-key.pem" >> inventory.ini
+      working-directory: infra/ansible
+
+    - name: Run Ansible Deploy Playbook
+      run: ansible-playbook -i inventory.ini playbook.yml
+      working-directory: infra/ansible
+      env:
+        ANSIBLE_HOST_KEY_CHECKING: False # Disable host key checking for dynamic hosts
+        # The SSH_PRIVATE_KEY secret should contain the private key associated with the `key_pair_name` in Terraform
+        # e.g., if key_pair_name is 'my-ec2-key', the secret should contain the content of 'my-ec2-key.pem'

@@ -1,113 +1,134 @@
 version: '3.8'
 
 services:
-  traefik:
-    image: "traefik:v2.11"
-    container_name: "traefik"
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=kelechikalu95@gmail.com"
-      - "--certificatesresolvers.myresolver.acme.storage=/data/acme.json"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "traefik_data:/data"
-    networks:
-      - web
-
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+    container_name: frontend
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`remmyboothe.online`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=myresolver"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.frontend-redirect.rule=Host(`remmyboothe.online`)"
+      - "traefik.http.routers.frontend-redirect.entrypoints=web"
+      - "traefik.http.routers.frontend-redirect.middlewares=frontend-redirect-scheme"
+      - "traefik.http.middlewares.frontend-redirect-scheme.redirectscheme.scheme=https"
     networks:
+      - internal
       - web
 
   auth-api:
-    build: ./auth-api
+    build:
+      context: ./auth-api
+    container_name: auth-api
     environment:
-      - USERS_API_ADDRESS=http://users-api:8083
-      - JWT_SECRET=your-super-secret-key
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.auth-api.entrypoints=websecure"
       - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
       - "traefik.http.services.auth-api.loadbalancer.server.port=8080"
+      - "traefik.http.routers.auth-api-redirect.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth-api-redirect.entrypoints=web"
+      - "traefik.http.routers.auth-api-redirect.middlewares=auth-api-redirect-scheme"
+      - "traefik.http.middlewares.auth-api-redirect-scheme.redirectscheme.scheme=https"
     networks:
-      - web
       - internal
+      - web
 
   todos-api:
-    build: ./todos-api
+    build:
+      context: ./todos-api
+    container_name: todos-api
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JWT_SECRET=your-super-secret-key
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
+      - REDIS_URL=redis://redis:6379
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.todos-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/todos`)"
       - "traefik.http.routers.todos-api.entrypoints=websecure"
       - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
       - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
-    depends_on:
-      - redis
+      - "traefik.http.routers.todos-api-redirect.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api-redirect.entrypoints=web"
+      - "traefik.http.routers.todos-api-redirect.middlewares=todos-api-redirect-scheme"
+      - "traefik.http.middlewares.todos-api-redirect-scheme.redirectscheme.scheme=https"
     networks:
-      - web
       - internal
+      - web
 
   users-api:
-    build: ./users-api
+    build:
+      context: ./users-api
+    container_name: users-api
     environment:
-      - JWT_SECRET=your-super-secret-key
+      - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.users-api.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/users`)"
       - "traefik.http.routers.users-api.entrypoints=websecure"
       - "traefik.http.routers.users-api.tls.certresolver=myresolver"
       - "traefik.http.services.users-api.loadbalancer.server.port=8083"
+      - "traefik.http.routers.users-api-redirect.rule=Host(`remmyboothe.online`) && PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users-api-redirect.entrypoints=web"
+      - "traefik.http.routers.users-api-redirect.middlewares=users-api-redirect-scheme"
+      - "traefik.http.middlewares.users-api-redirect-scheme.redirectscheme.scheme=https"
     networks:
-      - web
       - internal
+      - web
 
   log-message-processor:
-    build: ./log-message-processor
+    build:
+      context: ./log-message-processor
+    container_name: log-message-processor
     environment:
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_CHANNEL=log_channel
-    depends_on:
-      - redis
     networks:
       - internal
 
   redis:
-    image: "redis:6-alpine"
-    command: redis-server --appendonly yes
-    volumes:
-      - "redis-data:/data"
+    image: redis:alpine
+    container_name: redis
     networks:
       - internal
 
-volumes:
-  redis-data:
-  traefik_data:
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    environment:
+      - STORAGE_TYPE=mem
+    ports:
+      - "9411:9411"
+    networks:
+      - internal
+
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.myresolver.acme.tlschallenge=true
+      - --certificatesresolvers.myresolver.acme.email=kelechikalu95@gmail.com  # REPLACE with your email
+      - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080" # For Traefik dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./acme.json:/etc/traefik/acme.json"
+    networks:
+      - web
 
 networks:
   web:
-    driver: bridge
+    external: true
   internal:
-    driver: bridge
+    external: false

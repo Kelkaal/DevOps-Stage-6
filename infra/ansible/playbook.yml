@@ -1,12 +1,11 @@
 ---
 - name: Provision and Deploy Application
   hosts: app_servers
+  remote_user: ubuntu
   become: yes
-
   vars:
-    app_repo_url: "https://github.com/Kelkaal/DevOps-Stage-6.git"
-    app_repo_path: "/opt/devops-stage-6"
+    ansible_python_interpreter: /usr/bin/python3
 
   roles:
-    - role: dependencies
-    - role: deploy
+    - dependencies
+    - deploy
