@@ -33,7 +33,7 @@ jobs:
       id: get_ip
       run: |
         INSTANCE_ID=$(aws ec2 describe-instances \
-          --filters "Name=tag:Name,Values=gemini-app-server" "Name=instance-state-name,Values=running" \
+          --filters "Name=tag:Name,Values=devops-app-server" "Name=instance-state-name,Values=running" \
           --query "Reservations[0].Instances[0].InstanceId" \
           --output text)
         
