@@ -45,6 +45,9 @@ jobs:
         }
         EOF
 
+    - name: Debug Secret
+      run: echo "Is TF_API_TOKEN secret present? ${{ secrets.TF_API_TOKEN != '' }}"
+
     - name: Terraform Init
       id: init
       run: terraform init
