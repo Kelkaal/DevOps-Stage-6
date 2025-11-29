@@ -3,10 +3,14 @@ FROM maven:3.8.7-openjdk-18-slim AS builder
 
 WORKDIR /app
 
-# Copy the source code
-COPY . .
+# Copy pom.xml and download dependencies to leverage Docker cache
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
-# Build the application. This command also downloads dependencies.
+# Copy the rest of the source code
+COPY src ./src
+
+# Build the application
 RUN mvn package -Dmaven.test.skip=true
 
 # Final Stage
@@ -21,4 +25,4 @@ COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8083
 
 # Command to run the application
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
