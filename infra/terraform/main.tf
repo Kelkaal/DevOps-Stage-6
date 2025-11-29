@@ -1,3 +1,4 @@
+# Triggering a new workflow run
 provider "aws" {
   region = var.aws_region
 }
