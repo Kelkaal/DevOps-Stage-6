@@ -33,6 +33,18 @@ jobs:
       with:
         terraform_version: 1.6.6
 
+    - name: Configure Terraform Cloud Token
+      run: |
+        cat >~/.terraform.d/credentials.tfrc.json <<EOF
+        {
+          "credentials": {
+            "app.terraform.io": {
+              "token": "${{ secrets.TF_API_TOKEN }}"
+            }
+          }
+        }
+        EOF
+
     - name: Terraform Init
       id: init
       run: terraform init
